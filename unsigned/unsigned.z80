@@ -1,0 +1,2470 @@
+.nolist
+    #include      "ti83plus.inc"
+	#include	"relocate.inc"
+.list
+.org    $9DCB
+
+progStart equ	$9D93
+
+
+
+#define mcall(xxxx)	ld ix,xxxx	\ call myCall
+
+
+selected	equ	appBackUpScreen	;1
+saveSPz		equ	selected+1	;2
+
+
+	bcall(_chk_batt_low)
+	ret	z
+
+
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+	ld	a, $69
+	ld	($8000), a
+	ld	c, $FF
+	ld	ix, $7FFF
+	.db	$DD, $CB, 01, $FF
+	cp	$69 + $80
+	ret	nz
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+	call	unlockFlash
+	in	a, (06)
+	push	af
+	ld	(saveSPz), sp
+
+	in	a, (02)
+	rlca
+	jr	nc, is83Plus
+	ld	a, $83
+	out	(05), a
+is83Plus:
+
+
+
+
+	ld	hl, $D77E
+	ld	de, saveSScreen
+	ld	bc, $300
+	ldir
+
+
+	bcall(_runIndicOff)
+mainMenu:
+	bcall(_grBufClr)
+	ld	hl, mainMenuText
+	jp	menu
+
+
+
+	
+
+addName:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	handleRevision
+	jr	c, mainMenu
+	call	handleName
+	jr	c, mainMenu
+	call	replaceE000
+	call	writeCert
+	jp	mainMenu
+
+
+addRevision:
+	call	getCertToExtra
+	call	remove0300FromCert
+
+	call	handleRevision
+	jr	c, mainMenu
+
+	call	replaceE000
+	call	writeCert
+	jr	mainMenu
+
+
+
+removeName:
+	call	getCertToExtra
+	call	remove0300FromCert
+	ld	de, $0500
+	call	removeFrom0300
+	call	replaceE000
+	call	writeCert
+	jr	mainmenu
+
+
+
+removeRevision:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	writeCert
+	jr	mainMenu
+
+
+
+
+;############################
+signedMenu:
+	bcall(_grBufClr)
+	ld	hl, signedMenuText
+	jp	menu
+
+
+signedOS:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	handleRevision
+	jp	c, signedMenu
+
+	ld	de, $0700
+	call	removeFrom0300
+
+	ld	de, $0004
+	ld	hl, normal04Data
+	call	newKeyData
+
+	ld	de, $000A
+	ld	hl, normal0AData
+	call	newKeyData
+
+	call	replaceF000
+	call	replaceE000
+	call	writeCert
+	jr	signedMenu
+
+
+unsignedOS:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	handleRevision
+	jp	c, signedMenu
+
+	ld	de, $0700
+	call	removeFrom0300
+
+	ld	de, $0004
+	ld	hl, fakeOSKey
+	call	newKeyData
+
+	ld	de, $000A
+	ld	hl, fakeOSKey
+	call	newKeyData
+
+	call	replaceF000
+	call	replaceE000
+	call	writeCert
+	jr	signedMenu
+
+
+
+signedApps:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	handleRevision
+	jp	c, signedMenu
+
+	ld	de, $0700
+	call	removeFrom0300
+
+	ld	de, $0104
+	ld	hl, normal0104Data
+	call	newKeyData
+
+	ld	de, $010A
+	ld	hl, normal010AData
+	call	newKeyData
+
+	call	replaceF000
+	call	replaceE000
+	call	writeCert
+	jp	signedMenu
+
+
+unsignedApps:
+	call	getCertToExtra
+	call	remove0300FromCert
+	call	handleRevision
+	jp	c, signedMenu
+
+	ld	de, $0700
+	call	removeFrom0300
+
+	ld	de, $0104
+	ld	hl, fakeAppKey
+	call	newKeyData
+
+	ld	de, $010A
+	ld	hl, fakeAppKey
+	call	newKeyData
+
+	call	replaceF000
+	call	replaceE000
+	call	writeCert
+	jp	signedMenu
+
+
+
+
+
+errorQuit:
+	ld	sp, (saveSPz)
+
+
+quit:
+	xor	a
+	out	(01), a
+	nop
+	nop
+	in	a, (01)
+	inc	a
+	jr	nz, quit
+	ei
+	halt
+	halt
+	halt
+	xor	a
+	out	(01), a
+	nop
+	nop
+	in	a, (01)
+	inc	a
+	jr	nz, quit
+
+	bcall(_clrLCDFull)
+	bcall(_clrTxtShd)
+	bcall(_homeUp)
+	res	plotDisp, (iy + plotFlags)
+	res	7, (iy + 20)	;write to PlotSScreen
+
+	in	a, (02)
+	rlca
+	jr	c, not83Plus
+	bcall(_resetRam)
+not83Plus:
+
+	ld	hl, saveSScreen
+	ld	de, $D77E
+	ld	bc, $300
+	push	bc
+	ldir
+	pop	bc
+	ex	de, hl
+	bcall(_memClear)
+
+	xor	a
+	out	(05), a		;| important order
+	pop	af		;|
+	out	(06), a
+
+	bcall(_fillBasePageTable)
+
+	ld	hl, quitRunner
+	ld	de, saveSScreen
+	ld	bc, quitRunnerEnd-quitRunner
+	ldir
+	jp	saveSScreen
+
+quitRunner:
+	relocate(saveSScreen)
+	ld	hl, $9D95
+	ld	de, progEnd-progStart
+	bcall(_delMem)
+	bcall(_jForceCMDNoChar)
+	endRelocate()
+quitRunnerEnd:
+
+
+
+
+;#############################
+viewCertificate:
+	ld	hl, calcsysName
+	rst	20h
+	bcall(_findApp)
+	jp	c, mainMenu
+
+	out	(06), a
+
+	call	unlockFlash
+	
+	ld	hl, calcsysRunner
+	ld	de, saveSScreen
+	ld	bc, calcsysRunnerEnd-calcsysRunner
+	ldir
+	
+	in	a, (02)
+	rlca
+	jp	nc, saveSScreen
+
+	xor	a
+	out	(05), a
+	jp	saveSScreen
+
+calcsysRunner:
+	relocate(saveSScreen)
+	ld	hl, $9D95
+	ld	de, progEnd-progStart
+	bcall(_delMem)
+
+	bcall(_getCertificateStart)
+	ld	(appBackUpScreen), hl
+	in	a, (02)
+	rlca
+	ld	a, $7E
+	jr	c, not83p3
+	ld	a, $1E
+not83P3:
+	ld	(appBackUpScreen+2), a
+	
+	jp	$40C6		;hex editor
+
+	endRelocate()
+calcsysRunnerEnd:
+
+calcsysName:
+	.db	appObj, "Calcsys "
+
+;#############################
+newKeyData:
+	push	hl
+	call	locateKey	;we just added it, can't be missing
+	push	hl
+	ld	de, $0730
+	call	findField
+	inc	hl
+	bcall(_getFieldSize)
+	add	hl, bc
+	pop	de
+	or	a
+	sbc	hl, de
+	ld	c, l
+	ld	b, h
+	ex	de, hl
+	ld	de, $F800
+	push	bc
+	push	hl
+	ldir
+	ld	a, $FF
+	ld	(de), a
+
+	push	hl
+	call	workToEnd
+	pop	de
+	or	a
+	sbc	hl, de
+	ld	c, l
+	ld	b, h
+	inc	bc
+	ex	de, hl
+	pop	de
+	ldir
+
+	pop	bc
+	ld	hl, 0
+	or	a
+	sbc	hl, bc
+	ld	b, h
+	ld	c, l
+	ld	hl, $F001
+	call	modifySizeByte
+
+	
+	ld	hl, $F800
+	ld	de, $0730
+	call	findField
+	ex	de, hl
+	pop	hl
+	call	copyPreLengthed
+	ld	a, $FF
+	ld	(de), a
+
+
+	ld	hl, $F000
+	call	workToEnd
+	push	hl
+
+	ld	hl, $F800
+	call	workToEnd
+	ld	de, -$F800
+	add	hl, de
+	ld	c, l
+	ld	b, h
+	pop	de
+
+	ld	hl, $F800
+	push	bc
+	ldir
+	ld	a, $FF
+	ld	(de), a
+	
+	pop	bc
+	ld	hl, $F001
+	call	modifySizeByte
+	
+	ret
+
+
+
+;#############################
+handleName:
+	bcall(_clrLCDFull)
+	ld	hl, typeTextText
+	ld	de, 0
+	ld	(curRow), de
+	bcall(_putS)
+
+	ld	de, $0500
+	call	removeFrom0300
+
+	ld	hl, $F000
+	ld	de, $0510
+	bcall(_findSubField)
+	ld	bc, 0
+	jr	nz, isNotFound
+	inc	hl
+	bcall(_getFieldSize)
+isNotFound:
+	ld	de, $8000
+	ld	a, b
+	or	c
+	jr	z, dontLdir
+	ldir
+dontLdir:
+	xor	a
+	ld	(de), a
+	ld	de, 2
+	ld	c, 95
+	ld	hl, $8000
+	call	typingEdit
+	ret	c
+
+	push	bc
+
+	ld	hl, blank0500
+	ld	de, $F000
+	ld	bc, 4
+	ldir
+
+	pop	bc
+	ld	c, b
+	ld	b, 0
+	push	bc
+	ld	hl, $8000
+	ldir
+	ld	a, $FF
+	ld	(de), a
+	pop	bc
+	ld	hl, $F003
+	call	writeSizeBytes
+	ld	hl, $F002
+	call	workToEnd
+	ld	de, -$F002
+	add	hl, de
+	ld	b, h
+	ld	c, l
+	ld	hl, $F001
+	call	writeSizeBytes
+	
+	call	replaceF000
+	or	a
+	ret
+	
+
+
+
+;#############################
+writeCert:
+	di
+	ld	hl, $C001
+	call	workToEnd
+	ex	de, hl
+	ld	hl, $DBFF
+	or	a
+	sbc	hl, de
+	ld	c, l
+	ld	b, h
+	ld	l, e
+	ld	h, d
+	inc	de
+	ld	(hl), $FF
+	ldir
+
+	xor	a
+	ld	r, a
+	ld	bc, 0
+outerLpzz:
+	djnz	outerLpzz
+	dec	c
+	jr	nz, outerLpzz
+	ld	a, r		
+	cp	3
+	ret	nz
+
+	ld	hl, $4000
+	ld	a, $7E
+	call	translatePage
+	bcall(_eraseFlash)
+	ld	hl, $6000
+	ld	a, $7E
+	call	translatePage
+	bcall(_eraseFlash)
+	ld	hl, $C000
+	ld	de, $4000
+	ld	bc, $2000
+	ld	a, $7E
+	call	translatePage
+	bcall(_writeFlashUnsafe)
+	ret
+
+
+
+
+;#############################
+handleRevision:
+	bcall(_clrLCDFull)
+	ld	hl, revisionNumText
+	ld	de, 0
+	ld	(curRow), de
+	bcall(_putS)
+	ld	de, 4
+	ld	(curRow), de
+	bcall(_putS)
+
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+	di
+	ld	a, $50
+	ld	r, a
+	ld	a, r
+	cp	$52
+	jp	nz, $0000
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+	ld	de, $0100
+	call	removeFrom0300
+
+	ld	hl, $F001
+	bcall(_getFieldSize)
+	call	getBigBCFromC
+
+	ld	l, c
+	ld	h, b
+	ld	de, $8000
+	call	convHex
+
+	ld	hl, $8000
+	ld	c, 5
+	ld	de, 2
+	call	typingEdit
+	ret	c
+
+	ld	de, 0
+convertToHex:
+	push	hl
+	ld	a, 10
+	bcall(_multAbyDE)
+	pop	de
+	ld	a, (de)
+	inc	de
+	sub	$30
+	add	a, l
+	ld	l, a
+	jr	nc, $+3
+	inc	h
+;$$
+	ex	de, hl
+	djnz	convertToHex
+
+	ld	hl, $FFFF
+	ld	($F003), hl
+
+	ld	a, e
+	ld	($F002), a
+	ld	c, 2
+	ld	b, 0
+	ld	a, d
+	or	a
+	jr	z, not2Bytez
+	ld	a, d
+	ld	d, e
+	ld	e, a
+	ld	($F002), de	;big endian, wtf
+	jr	sizeFound
+not2Bytez:
+	dec	c
+	ld	a, e
+	or	a
+	jr	nz, sizeFound
+	ld	($F002), hl
+	dec	c
+sizeFound:
+
+	ld	hl, $F001
+	call	writeSizeBytes
+	call	replaceF000
+
+
+	call	addKeysIfMissing
+
+	or	a
+
+	ret	
+
+
+
+;##################################
+replaceE000:
+	ld	hl, $E000
+	call	workToEnd
+	ld	de, -$E000
+	add	hl, de
+	push	hl
+	ld	hl, $C001
+	call	workToEnd
+	pop	bc
+	ex	de, hl
+	ld	hl, $E000
+	ldir
+	ld	a, $FF
+	ld	(de), a
+	ret
+
+
+
+
+;##################################
+replaceF000:
+	ld	hl, $E000
+	call	workToEnd
+	push	hl
+
+	ld	hl, $F000
+	call	workToEnd
+	ld	de, -$F000
+	add	hl, de
+	ld	c, l
+	ld	b, h
+	pop	de
+
+	ld	hl, $F000
+	push	bc
+	ldir
+	ld	a, $FF
+	ld	(de), a
+	
+	pop	bc
+	ld	hl, $E001
+	call	modifySizeByte
+	ret
+
+
+
+;#############################
+addKeysIfMissing:
+	ld	de, $0700
+	call	removeFrom0300
+
+	ld	hl, normal04
+	ld	de, $0004
+	call	addIfMissing
+
+	ld	hl, normal0A
+	ld	de, $000A
+	call	addIfMissing
+
+	ld	hl, normal0104
+	ld	de, $0104
+	call	addIfMissing
+
+	ld	hl, normal010A
+	ld	de, $010A
+	call	addIfMissing
+
+	call	replaceF000
+	ret
+
+
+
+;#############################
+addIfMissing:
+	push	hl
+	call	locateKey
+	pop	hl
+	ret	z
+
+	push	hl
+	ld	hl, $F001
+	bcall(_getFieldSize)
+	call	workToEnd
+	ex	de, hl
+	pop	hl
+
+	call	copyPrelengthed
+	push	bc
+	call	copyPrelengthed
+	pop	hl
+	add	hl, bc
+	ld	b, h
+	ld	c, l
+
+;	ld	a, $FF
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+	ld	a, 1
+	.db	$ED, $7C
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^	
+
+	ld	(de), a
+	ld	hl, $F001
+	call	modifySizeByte
+	ret
+
+
+;#############################
+copyPrelengthed:
+	ld	c, (hl)
+	inc	hl
+	ld	b, (hl)
+	inc	hl
+	push	bc
+	ldir
+	pop	bc
+	ret
+
+
+;#############################
+locateKey:
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+	di
+	ld	a, $FF
+	ld	r, a
+	ld	a, r
+	cp	$81
+	jp	nz, $0000
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	ld	hl, $F001
+	push	de
+	bcall(_getFieldSize)
+	pop	de
+locateKeyLoop:
+	push	de
+	ld	de, $0710
+	call	findField
+	push	hl
+	inc	hl
+	bcall(_getFieldSize)	;preserves AF
+	pop	ix
+	pop	de
+	ret	nz
+	push	ix
+	ld	a, d
+	or	a
+	jr	z, OSKeyCheck
+
+	cp	(hl)
+	jr	nz, keyDoesntMatch
+	inc	hl
+	dec	bc
+OSKeyCheck:
+	ld	a, e
+	cp	(hl)
+	jr	nz, keyDoesntmatch
+	inc	hl
+	dec	bc
+	ld	a, b
+	or	c
+	jr	z, keyMatches
+
+keyDoesntMatch:
+	pop	af
+	add	hl, bc
+	jr	locateKeyLoop
+
+keyMatches:
+	pop	hl
+	ret
+	
+
+
+;#############################
+getBigBCFromC:
+	ld	a, c
+	ld	c, (hl)
+	inc	hl
+	ld	b, (hl)
+	sub	2
+	jr	nz, not2Bytes
+	ld	b, c
+	ld	c, (hl)
+	ret
+not2Bytes:
+	ld	b, 0
+	inc	a
+	ret	z
+	ld	c, 0
+	ret
+
+
+
+;#############################
+removeFrom0300:
+	ld	hl, $E000
+	push	hl
+	bcall(_findSubField)
+	jr	z, dontCreateField
+	
+	pop	hl
+	ld	hl, $F000
+	ld	(hl), d
+	inc	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), $FF
+	ret
+dontCreateField:
+	push	hl
+	inc	hl
+	bcall(_getFieldSize)
+	pop	de
+	push	de
+	or	a
+	sbc	hl, de
+	add	hl, bc
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	pop	de
+	push	bc
+	push	de
+	ld	de, $F000
+	ldir
+
+	ld	a, $FF
+
+
+	ld	(de), a
+	push	hl
+	call	workToEnd
+
+	pop	de
+	or	a
+	sbc	hl, de
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	pop	de
+	inc	bc
+
+	ldir
+	
+	pop	bc
+	ld	hl, 0
+	or	a
+	sbc	hl, bc
+	ld	b, h
+	ld	c, l
+	pop	hl
+	inc	hl
+	call	modifySizeByte
+	ret
+
+
+
+
+;############################
+;removes size bytes, then puts them back
+;hl = size byte
+;bc = modify amount
+;
+
+modifySizeByte:
+	ld	a, b
+	or	c
+	ret	z
+
+	push	hl
+	push	bc
+	ld	a, (hl)
+	and	$0F
+	
+	cp	$0D
+	jr	z, isDSize
+
+	cp	$0E
+	jr	z, isESize
+
+	cp	$0F
+	jp	z, errorQuit
+
+	ld	c, a
+	ld	b, 0
+	pop	hl
+	add	hl, bc
+	jr	noShiftNeeded
+
+isDSize:
+	inc	hl
+	ld	c, (hl)
+	ld	b, 0
+	ld	e, l
+	ld	d, h
+	inc	hl
+	jr	shiftReady
+isESize:
+	inc	hl
+	ld	e, l
+	ld	d, h
+	ld	b, (hl)
+	inc	hl
+	ld	c, (hl)
+	inc	hl
+shiftReady:
+	ex	(sp), hl
+	add	hl, bc
+	ld	b, h
+	ld	c, l
+	pop	hl
+
+	push	bc
+	ldir
+	ld	a, $FF
+	ld	(de), a
+	pop	hl
+noShiftNeeded:
+	ld	c, l
+	ld	b, h
+	pop	hl
+	call	writeSizeBytes
+	ret
+
+
+;##############################
+;hl = size bytes
+;bc = new size
+
+writeSizeBytes:
+	push	hl
+	ld	hl, $000C
+	or	a
+	sbc	hl, bc
+	pop	hl
+	jr	c, wontFitIn0
+
+	ld	a, (hl)
+	and	$F0
+	or	c
+	ld	(hl), a
+	ret
+wontFitIn0:
+	ld	a, b
+	or	a
+	jr	nz, needs2
+	
+	ld	a, (hl)
+	and	$F0
+	or	$0D
+	ld	(hl), a
+	
+	inc	bc		;copy FF byte
+	add	hl, bc
+	ld	e, l
+	ld	d, h
+	inc	de
+	ld	a, c
+	lddr
+	inc	hl
+	dec	a
+	ld	(hl), a
+	ret
+
+needs2:
+	ld	a, (hl)
+	and	$F0
+	or	$0E
+	ld	(hl), a
+	
+	inc	bc		;copy FF byte
+	add	hl, bc
+	ld	e, l
+	ld	d, h
+	inc	de
+	inc	de
+	push	bc
+	lddr
+	pop	bc
+	dec	bc
+	inc	hl
+	ld	(hl), b
+	inc	hl
+	ld	(hl), c
+	ret
+	
+	
+	
+
+
+;#############################
+remove0300FromCert:
+	ld	hl, $C001
+	ld	de, $0300
+	call	findField
+	jr	z, dontCreate0300Field
+
+	ld	hl, $E000
+	ld	(hl), $03
+	inc	hl
+	ld	(hl), 00
+	inc	hl
+	ld	(hl), $FF
+	ret
+
+dontCreate0300Field:
+	push	hl
+	inc	hl
+	bcall(_getFieldSize)
+	pop	de
+	push	de
+	or	a
+	sbc	hl, de
+	add	hl, bc
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	ld	de, $E000
+	ldir
+;	ld	a, $FF
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVV
+	di
+	ld	a, $FF-2
+	ld	r, a
+	ld	a, r
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	ld	(de), a
+	push	hl
+	
+	call	workToEnd
+
+	pop	de
+	or	a
+	sbc	hl, de
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	pop	de
+	inc	bc
+
+	ldir
+	ret
+
+
+;###############################
+findField:
+	ld	a, (hl)
+	cp	$FF
+	jr	nz, notGivingUp
+	or	a
+	ret
+notGivingUp:
+	cp	d
+	jr	nz, wrongAtFirst
+	inc	hl
+	ld	a, (hl)
+	and	$F0
+	cp	e
+	jr	nz, wrongAtSecond
+	dec	hl
+	ret
+
+
+wrongAtFirst:
+	inc	hl
+wrongAtSecond:
+	push	de
+	bcall(_getFieldSize)
+	pop	de
+	add	hl, bc
+	jr	findField
+
+
+
+
+
+
+;################################
+workToEnd:
+	ld	a, (hl)
+	cp	$FF
+	ret	z
+	inc	hl
+	bcall(_getFieldSize)
+	add	hl, bc
+	jr	workToEnd
+
+
+;###############################
+;convert HL to decimal
+;input: hl = number
+;	de = location to put number
+;output: b = number of numbers
+;	de = byte after last number
+;remarks:
+;	0 terminated, yay
+
+convHex:
+	push	de
+	inc	de
+	inc	de
+	inc	de
+	inc	de
+	push	de
+	ld	b, 1
+convHexLoop:
+	push	de
+	or	a
+	ld	de, 10
+	sbc	hl, de
+	add	hl, de
+	jr	c, next
+	pop	de
+
+	inc	b
+	ld	a, 10
+	bcall(_divHLbyA)
+
+	add	a, $30
+	ld	(de), a
+	dec	de
+	jr	convHexLoop
+next:
+	pop	de
+	ld	a, $30
+	add	a, l
+	ld	(de), a
+
+	pop	hl
+	pop	de
+	inc	hl
+	push	bc
+	
+backLoop:
+	dec	hl
+	djnz	backLoop
+
+	pop	bc
+	push	bc
+	ld	c, b
+	ld	b, 0
+	ldir
+
+	pop	bc
+
+	xor	a
+	ld	(de), a
+
+	ret
+
+
+
+
+
+;#####################################
+;edit something in the typing routine
+;input: same as below
+
+typingEdit:
+	push	hl
+
+	ld	(curRow), de
+	ld	b, 0
+dispToEditLoop:
+	ld	a, (hl)
+	or	a
+	jr	z, doneWithPut
+	bcall(_putC)
+	inc	hl
+	inc	b
+	jr	dispToEditLoop
+
+doneWithPut:
+
+	push	bc
+	push	de
+	dec	hl
+	ld	e, l
+	ld	d, h
+	inc	de
+	inc	de
+	push	de
+	ld	c, b
+	ld	b, 0
+	ld	a, c
+	or	b
+	jr	z, dontLddr
+	lddr
+dontLddr:
+	bcall(_clrTxtShd)
+	pop	hl
+	inc	hl
+	pop	de
+	pop	bc
+
+	ex	(sp), hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	dec	hl
+	ex	(sp), hl
+
+	jr	editEntry
+;#####################################
+;The all inclusive typing routine
+;input:	c = length
+;	de = curRow
+;	hl = buffer location
+;output:
+;	b = length
+;	de = byte after
+;	hl = beginning
+;	carry = quit
+;	zero terminated string
+;destroys:
+;	af, bc
+;	2 bytes after length of string
+
+typing:
+	push	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	
+	ld	(curRow), de
+
+	push	hl
+	push	bc
+	bcall(_clrTxtShd)
+	pop	bc
+	pop	hl
+
+	ld	b, 0
+
+editEntry:
+	set	shiftAlpha, (iy + shiftFlags)
+	res	shiftLwrAlph, (iy + shiftFlags)
+	set	curAble, (iy + curFlags)
+	
+
+typeLoop:
+	call	cursorOn
+typeLoop2:
+	halt
+	push	hl
+	bcall(_getCSC)
+	pop	hl
+	or	a
+	jr	z, typeLoop2
+
+	push	af
+	call	cursorOff
+	pop	af	
+
+	cp	skEnter
+	jr	nz, notEnter
+
+	res	curAble, (iy + curFlags)
+	res	shiftLwrAlph, (iy + shiftFlags)
+	res	shiftAlpha, (iy + shiftFlags)
+
+	pop	hl
+	push	hl
+	
+	ld	de, 2
+	add	hl, de
+	
+	pop	de
+	push	de
+
+	push	bc
+	ld	c, b
+	ld	b, 0
+	ldir
+
+	pop	bc
+	pop	hl
+	xor	a
+	ld	(de), a
+	ret
+
+notEnter:
+	cp	sk2nd
+	jr	nz, not2ndz
+
+	res	shiftLwrAlph, (iy + shiftFlags)	
+	res	shiftAlpha, (iy + shiftFlags)
+	jr	typeLoop
+
+not2ndz:
+	cp	skAlpha
+	jr	nz, notAlpha
+
+	set	shiftAlpha, (iy + shiftFlags)
+	ld	a, (iy + shiftFlags)
+	xor	%00000001 << shiftLwrAlph
+	ld	(iy + shiftFlags), a
+	jr	typeLoop
+
+notAlpha:
+	cp	skLeft
+	jr	nz, notLeft
+doLeft:
+	ld	a, b
+	or	a
+	jp	z, typeLoop
+	
+	dec	b
+
+	dec	hl
+	ld	(hl), 0
+	ld	de, (curRow)
+	dec	d
+	jp	p, notOffEdge
+	ld	d, 15
+	dec	e
+notOffEdge:
+	ld	(curRow), de
+	ld	a, ' '
+	bcall(_putMap)
+	jp	typeLoop
+
+
+
+
+
+notLeft:
+	cp	skDel
+	jr	z, doLeft
+notDelete:
+	cp	skMode
+	jr	nz, notMode
+	
+	res	curAble, (iy + curFlags)
+	res	shiftLwrAlph, (iy + shiftFlags)
+	res	shiftAlpha, (iy + shiftFlags)
+
+	pop	hl
+	scf
+	ret
+notMode:
+	cp	skClear
+	jr	nz, notClear
+
+	ld	a, b
+	or	a
+	jp	z, typeLoop
+
+	pop	hl
+	push	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+
+	push	de
+	ld	(curRow), de
+
+	push	bc
+	ld	c, b
+	ld	b, 0
+	inc	bc
+	bcall(_memClear)
+
+	pop	bc
+	ld	a, ' '
+clearLoop:
+	bcall(_putC)
+	djnz	clearLoop
+
+	pop	de
+	ld	(curRow), de
+
+	pop	hl
+	
+	jp	typeLoop
+
+notClear:
+	
+	sub	skAdd
+	jp	c, typeLoop
+	cp	skMath - skAdd + 1
+	jp	nc, typeLoop
+
+	push	hl
+
+	ld	hl, numTable
+	bit	shiftAlpha, (iy + shiftFlags)
+	jr	z, setFound
+	ld	hl, lowTable
+	bit	shiftLwrAlph, (iy + shiftFlags)
+	jr	nz, setFound
+	ld	hl, charTable
+
+setFound:
+
+	ld	e, a
+	ld	d, 0
+	add	hl, de
+
+	ld	a, b
+	cp	c
+	jr	z, noMore
+
+	ld	a, (hl)
+
+	or	a
+noMore:
+	pop	hl
+	jp	z, typeLoop
+
+	inc	b
+
+	ld	(hl), a
+	inc	hl
+	
+	bcall(_putC)
+	jp	typeLoop
+
+	
+
+
+cursorOn:
+	res	curOn, (iy + curFlags)
+	jr	readyk
+cursorOff:
+	set	curOn, (iy + curFlags)
+readyk:
+	ld	a, 1
+	ld	(curTime), a
+	ei
+	halt
+	ret
+
+
+
+
+CharTable:
+	.db	$22, "WRMH", 00, 00
+	.db	"?", $5B, "VQLG", 00, 00
+	.db	":ZUPKFC", 00
+	.db	" YTOJEB", 00, 00
+	.db	"XSNIDA"
+
+NumTable:
+	.db	"+-*/^", 00, 00
+	.db	$1A, "369)", 00, 00, 00
+	.db	".258(", 00, 00, 00
+	.db	"0147,", 00, 00, 00, 00
+	.db	$1C, 00, 00, $12, $11, 00
+
+lowTable:
+	.db	$22, "wrmh", 00, 00
+	.db	"?", $5B, "vqlg", 00, 00
+	.db	":zupkfc", 00
+	.db	" ytojeb", 00, 00
+	.db	"xsnida"
+
+
+
+
+;#############################
+getCertToExtra:
+	bcall(_getCertificateStart)
+	di
+	ld	bc, $2000
+	ld	de, $C000
+	ld	a, $7E
+	call	translatePage
+	out	(06), a
+	ldir
+	ret
+
+
+
+;#####################################
+UnlockFlash:
+;Unlocks Flash protection.
+;Destroys: appBackUpScreen		;I wanted to use mine
+;          pagedCount			;but it doesn't work on the 83+BE
+;          pagedGetPtr
+;          arcInfo
+;          iMathPtr5
+;          pagedBuf
+;          ramCode
+        in a,(6)
+        push af
+        ld a,7Bh
+        call translatePage
+        out (6),a
+        ld hl,5092h
+        ld e,(hl)
+        inc hl
+        ld d,(hl)
+        inc hl
+        ld a,(hl)
+        call translatePage
+        out (6),a
+        ex de,hl
+        ld a,0CCh
+        ld bc,0FFFFh
+        cpir
+        ld e,(hl)
+        inc hl
+        ld d,(hl)
+        push de
+        pop ix
+        ld hl,9898h
+        ld (hl),0C3h
+        inc hl
+        ld (hl),returnPoint & 11111111b
+        inc hl
+        ld (hl),returnPoint >> 8
+        ld hl,pagedBuf
+        ld (hl),98h
+        ld de,pagedBuf+1
+        ld bc,49
+        ldir
+        ld (iMathPtr5),sp
+        ld hl,(iMathPtr5)
+        ld de,9A00h
+        ld bc,50
+        ldir   
+        ld de,(iMathPtr5)
+        ld hl,-12
+        add hl,de
+        ld (iMathPtr5),hl
+        ld iy,0056h-25h
+        ld a,50
+        ld (pagedCount),a
+        ld a,8
+        ld (arcInfo),a
+        jp (ix)
+translatePage:
+	push	bc
+        ld b,a
+        in a,(2)
+        and 80h
+        jr z,_is83P
+        in a,(21h)
+        and 3
+        ld a,b
+	pop	bc
+        ret nz
+        and 3Fh
+        ret
+_is83P: ld a,b
+        and 1Fh
+	pop	bc
+        ret
+returnPoint:
+        ld iy,flags
+        ld hl,(iMathPtr5)
+        ld de,12
+        add hl,de
+        ld sp,hl
+        ex de,hl
+        ld hl,9A00h
+        ld bc,50
+        ldir
+        pop af
+        out (6),a
+        ret
+
+
+
+
+
+
+;#####################################
+;do a menu
+;input: hl = menu formatting start
+
+menu:
+	set	7, (iy + 20)	;write to PlotSScreen
+	push	hl
+	ld	b, 7
+	ld	l, 0
+titleLoop1:
+	call	drawHorizLine
+	inc	l
+	djnz 	titleLoop1
+	
+	set	3, (iy + 5)	;inverse
+
+	pop	hl	
+
+	ld	e, (hl)
+	inc	hl
+	ld	d, 0
+	ld	(penCol), de
+	bcall(_vPutS)
+
+	res	3, (iy + 5)	;inverse
+
+doSelections:
+	ld	a, 1
+	ld	(selected), a	
+	ld	b, (hl)
+	inc	hl
+innerSelectionLoop:
+	set	1, (iy + 5)
+	ld	de, 8*256+0
+	ld	(penCol), de
+	push	hl
+	push	bc
+	ld	c, 1
+selectsLoop:
+	ld	a, (selected)
+	cp	c
+	jr	nz, notSelected
+	set	3, (iy + 5)	;inverse
+notSelected:
+	ld	a, ' '
+	bcall(_vPutMap)
+	ld	a, c
+	add	a, $30
+	bcall(_vPutMap)
+	ld	a, ':'
+	bcall(_vPutMap)
+	res	3, (iy + 5)	;inverse
+	ld	a, 10
+	ld	(penCol), a
+	bcall(_vPutS)
+	ld	a, (penRow)
+	add	a, 8
+	ld	(penRow), a
+	xor	a
+	ld	(penCol), a
+	inc	c
+	djnz	selectsLoop
+
+	res	1, (iy + 5)
+
+	push	hl
+	bcall(_grBufCpy)
+	pop	hl	
+
+	ei
+keyLoop:
+	halt
+	push	hl
+	bcall(_GetCSC)
+	pop	hl
+	or	a
+	jr	z, keyLoop
+
+	cp	skDown
+	jr	nz, notDown
+	ld	a, (selected)
+	pop	bc
+	push	bc
+	cp	b
+	jr	nz, notLast
+	xor	a
+notLast:
+	inc	a
+	ld	(selected), a
+keyFound:
+	pop	bc
+	pop	hl
+	jr	innerSelectionLoop
+notDown:
+
+	cp	skUp
+	jr	nz, notUp
+	ld	a, (selected)
+	dec	a
+	jr	nz, notFirst
+	pop	af
+	push	af
+notFirst:
+	ld	(selected), a
+	jr	keyFound
+notUp:
+
+	cp	sk2nd
+	jr	nz, not2nd
+_2nd:
+	ld	a, (selected)
+numberEntry:
+	pop	bc
+	push	bc
+	inc	b
+	cp	b
+	jr	nc, keyLoop
+	dec	a
+	rlca
+	ld	e, a
+	ld	d, 0
+	add	hl, de
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	pop	af
+	pop	af
+	jp	(hl)
+not2nd:
+
+	cp	skClear
+	jr	nz, notClearz
+
+	pop	af
+	push	af
+	jr	numberEntry
+	
+notClearz:
+	
+	cp	skEnter
+	jr	z, _2nd
+
+	sub	sk3
+	jr	c, keyLoop
+	cp	sk7+1
+	jr	nc, keyLoop
+	ld	e, a
+	ld	d, 0
+	push	hl
+	ld	hl, numChart
+	add	hl, de
+	ld	a, (hl)
+	pop	hl
+	or	a
+	jr	z, keyLoop
+	jr	numberEntry
+	
+	
+
+numChart:
+	.db	3, 6, 9, 0, 0, 0, 0, 0
+	.db	2, 5, 8, 0, 0, 0, 0, 0
+	.db	1, 4, 7
+
+
+
+
+mainMenuText:
+	.db	17
+	.db	"Name in about screen", 0
+	.db	7
+	.db	"Add name", 0
+	.db	"Add cert revision", 0
+	.db	"Remove name", 0
+	.db	"Remove cert revision", 0
+	.db	"Signed / Unsigned", 0
+	.db	"View cert (Calcsys)", 0
+	.db	"Quit", 0
+	.dw	addName
+	.dw	addRevision
+	.dw	removeName
+	.dw	removeRevision
+	.dw	signedMenu
+	.dw	viewCertificate
+	.dw	quit
+
+signedMenuText:
+	.db	25
+	.db	"Signed / Unsigned", 0
+	.db	5
+	.db	"Unsigned OS", $27, 's', 0
+	.db	"Unsigned Apps", 0
+	.db	"Signed OS", $27, 's', 0
+	.db	"Signed Apps", 0
+	.db	"Back", 0
+	.dw	unsignedOS
+	.dw	unsignedApps
+	.dw	signedOS
+	.dw	signedApps
+	.dw	mainMenu
+
+;################################
+;Draws a horizonal line across whole screen
+;Input: L = y height
+;Output: Horizontal line
+;Destorys: ALL but C and IX
+
+DrawHorizLine:
+	push	bc
+	push	hl
+	ld	h, 0
+	ld	b, h
+	ld	c, l
+	add	hl, bc
+	add	hl, bc
+	add	hl, hl
+	add	hl, hl
+	ld	bc, plotSScreen
+	add	hl, bc
+	LD	B, 12
+	LD	A, $FF
+DrawHorizLineLoop:
+	LD	(HL), A
+	INC	HL
+	DJNZ	DrawHorizLineLoop
+	pop	hl
+	pop	bc
+	RET
+
+
+
+;############################################################################
+;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVvvvv
+;			Keys 
+;############################################################################
+
+
+
+normal04:
+	.dw	3
+	.db	$07, $11, $04
+normal04Data: 
+	.dw	67
+	.db	$07, $3D
+
+OSKey04:	db  40h	; @		; DATA XREF: _SetupOSPubKey:loc_53B5o
+		db  8Fh	; è
+		db 0E5h	; Â
+		db  28h	; (
+		db 0B3h	; ≥
+		db  40h	; @
+		db 0EBh	; Î
+		db  1Ch
+		db  88h	; à
+		db 0B5h	; µ
+		db    5
+		db 0B2h	; ≤
+		db  35h	; 5
+		db  4Bh	; K
+		db 0AAh	; ™
+		db 0DFh	; ﬂ
+		db  47h	; G
+		db 0F3h	; Û
+		db  61h	; a
+		db  6Dh	; m
+		db  92h	; í
+		db 0CBh	; À
+		db  53h	; S
+		db  2Eh	; .
+		db  7Eh	; ~
+		db  5Ah	; Z
+		db  2Ah	; *
+		db  0Dh
+		db 0FFh
+		db  1Ch
+		db  4Eh	; N
+		db  42h	; B
+		db  83h	; É
+		db 0CEh	; Œ
+		db 0EAh	; Í
+		db  2Bh	; +
+		db  2Fh	; /
+		db  7Ah	; z
+		db 0D5h	; ’
+		db 0F2h	; Ú
+		db  8Bh	; ã
+		db  7Eh	; ~
+		db  4Bh	; K
+		db 0E4h	; ‰
+		db 0F3h	; Û
+		db 0F4h	; Ù
+		db 0C9h	; …
+		db  9Ch	; ú
+		db 0ABh	; ´
+		db 0A0h	; †
+		db 0D9h	; Ÿ
+		db  8Ah	; ä
+		db  8Eh	; é
+		db  5Fh	; _
+		db  2Bh	; +
+		db 0E1h	; ·
+		db  5Eh	; ^
+		db  2Ah	; *
+		db 0ACh	; ¨
+		db  7Ch	; |
+		db 0EDh	; Ì
+		db    9
+		db  40h	; @
+		db 0EFh	; Ô
+		db  82h	; Ç
+
+
+normal0A:
+	.dw	3
+	.db	$07, $11, $0A
+normal0AData:
+	.dw	67
+	.db	$07, $3D
+
+
+
+OSKey0A:	db  40h	; @		; DATA XREF: _SetupOSPubKey:loc_53B0o
+		db 0B1h	; ±
+		db  1Ch
+		db  71h	; q
+		db 0D4h	; ‘
+		db 0EAh	; Í
+		db  2Ch	; ,
+		db  13h
+		db 0C9h	; …
+		db 0ABh	; ´
+		db  2Eh	; .
+		db  50h	; P
+		db  1Ch
+		db  60h	; `
+		db  85h	; Ö
+		db 0FEh	; ˛
+		db 0C8h	; »
+		db  7Fh	; 
+		db 0F3h	; Û
+		db 0B8h	; ∏
+		db  8Bh	; ã
+		db 0FDh	; ˝
+		db  78h	; x
+		db  3Eh	; >
+		db 0ACh	; ¨
+		db  43h	; C
+		db  35h	; 5
+		db  1Eh
+		db  1Bh
+		db  10h
+		db 0F6h	; ˆ
+		db  5Ah	; Z
+		db 0D3h	; ”
+		db  1Ch
+		db  79h	; y
+		db 0C1h	; ¡
+		db  26h	; &
+		db  8Fh	; è
+		db  75h	; u
+		db    5
+		db  1Dh
+		db 0C8h	; »
+		db 0FCh	; ¸
+		db    0
+		db  8Eh	; é
+		db 0BFh	; ø
+		db  59h	; Y
+		db  3Ah	; :
+		db 0E5h	; Â
+		db  91h	; ë
+		db  2Eh	; .
+		db  8Bh	; ã
+		db  65h	; e
+		db  39h	; 9
+		db  75h	; u
+		db 0C1h	; ¡
+		db  31h	; 1
+		db  27h	; '
+		db 0E2h	; ‚
+		db 0B6h	; ∂
+		db  0Ah
+		db  0Bh
+		db 0EFh	; Ô
+		db  5Fh	; _
+		db 0EFh	; Ô
+
+
+normal0104:
+	.dw	4
+	.db	$07, $12, $01, $04 
+	
+normal0104Data:
+	.dw	68
+	.db	$07, $3D, $41
+
+appKey0104:	db  40h	; @		; DATA XREF: ROM:loc_53F6o
+		db 0ADh	; ≠
+		db  24h	; $
+		db  31h	; 1
+		db 0DAh	; ⁄
+		db  22h	; "
+		db  97h	; ó
+		db 0E4h	; ‰
+		db  17h
+		db  5Eh	; ^
+		db 0ACh	; ¨
+		db  61h	; a
+		db 0A3h	; £
+		db  15h
+		db  4Fh	; O
+		db 0A3h	; £
+		db 0D8h	; ÿ
+		db  47h	; G
+		db  11h
+		db  57h	; W
+		db  94h	; î
+		db 0DDh	; ›
+		db  33h	; 3
+		db  0Ah
+		db 0B7h	; ∑
+		db 0FFh
+		db  36h	; 6
+		db 0BAh	; ∫
+		db  59h	; Y
+		db 0FEh	; ˛
+		db 0DAh	; ⁄
+		db  19h
+		db  5Fh	; _
+		db 0EAh	; Í
+		db  7Ch	; |
+		db  16h
+		db  74h	; t
+		db  3Bh	; ;
+		db 0D7h	; ◊
+		db 0BCh	; º
+		db 0EDh	; Ì
+		db  8Ah	; ä
+		db  0Dh
+		db 0A8h	; ®
+		db  85h	; Ö
+		db 0E5h	; Â
+		db 0E5h	; Â
+		db 0C3h	; √
+		db  4Dh	; M
+		db  5Bh	; [
+		db 0F2h	; Ú
+		db  0Dh
+		db  0Ah
+		db 0B3h	; ≥
+		db 0EFh	; Ô
+		db  91h	; ë
+		db  81h	; Å
+		db 0EDh	; Ì
+		db  39h	; 9
+		db 0BAh	; ∫
+		db  2Ch	; ,
+		db  4Dh	; M
+		db  89h	; â
+		db  8Eh	; é
+		db  87h	; á
+
+normal010A:
+	.dw	4
+	.db	$07, $12, $01, $0A 
+
+normal010AData:
+	.dw	68
+	.db	$07, $3D, $41
+
+appKey010A:	db  40h	; @		; DATA XREF: ROM:53F1o
+		db    5
+		db 0D1h	; —
+		db 0EBh	; Î
+		db  84h	; Ñ
+		db  85h	; Ö
+		db 0AAh	; ™
+		db  14h
+		db 0C9h	; …
+		db  83h	; É
+		db 0FFh
+		db 0A0h	; †
+		db  40h	; @
+		db  31h	; 1
+		db 0B2h	; ≤
+		db  7Ch	; |
+		db  89h	; â
+		db  95h	; ï
+		db  0Ch
+		db  3Dh	; =
+		db  7Fh	; 
+		db  41h	; A
+		db  81h	; Å
+		db 0FEh	; ˛
+		db  60h	; `
+		db  3Ah	; :
+		db  35h	; 5
+		db  3Fh	; ?
+		db  48h	; H
+		db 0DEh	; ﬁ
+		db    9
+		db  33h	; 3
+		db 0DFh	; ﬂ
+		db 0E1h	; ·
+		db  17h
+		db  3Bh	; ;
+		db 0DDh	; ›
+		db  2Eh	; .
+		db  14h
+		db 0FEh	; ˛
+		db 0B7h	; ∑
+		db  32h	; 2
+		db  5Bh	; [
+		db 0AAh	; ™
+		db  35h	; 5
+		db 0A1h	; °
+		db  2Fh	; /
+		db  21h	; !
+		db  80h	; Ä
+		db  4Dh	; M
+		db 0CFh	; œ
+		db 0D3h	; ”
+		db  0Eh
+		db  56h	; V
+		db  11h
+		db  9Ch	; ú
+		db  13h
+		db    5
+		db 0D3h	; ”
+		db  48h	; H
+		db 0A7h	; ß
+		db  7Bh	; {
+		db 0CFh	; œ
+		db  44h	; D
+		db  8Fh ; ≈
+
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+;##########################################################################
+
+
+fakeAppKey:
+	.dw	fakeAppKeyEnd-fakeAppKeyPut
+fakeAppKeyPut:
+	.db	$07, $3E
+	.db	(fakeAppKeyEnd-fakeAppKeyStart)/256
+	.db	(fakeAppKeyEnd-fakeAppKeyStart)&255
+fakeAppKeyStart:
+	relocate($8000)
+
+
+.block 11
+
+
+appUnlockRunner:
+	relocate2(saveSScreen)
+	in	a, (02)
+	rlca
+	ld	a, $7F
+	jr	c, not83P
+	ld	a, $1F
+not83P:
+	out	(06), a
+
+	ld	de, $1E50
+
+	in	a, (06)
+	sub	$7F-$69
+	bit	5, a
+	jr	nz, not83
+	ld	a, $15
+	ld	de, $1F18
+not83:
+	ld	b, a
+	ld	a, ($8434)
+	sub	b
+	neg
+	push	af		
+	add	a, a
+	
+	ld	h, 0
+	ld	l, a
+	add	hl, de
+	push	hl
+	bcall(_getCertificateStart)
+	pop	de
+	push	hl
+	add	hl, de
+	in	a, (06)
+	dec	a
+	ld	b, $80		;set free app
+	ex	de, hl
+	push	af
+	bcall(_writeAByte)
+	pop	af
+	ld	b, 00
+	bcall(_writeAByte)
+
+	pop	hl
+	pop	af
+	inc	a		;stupid TI
+	and	$F8
+	rrca
+	rrca
+	rrca
+	ld	b, 0
+	ld	c, a
+	add	hl, bc
+	ld	de, $1FE0
+	add	hl, de
+	ex	de, hl
+	in	a, (06)
+	dec	a		;remove delete flag
+	bcall(_writeAByte)
+	
+	ld	a, ($8434)
+	ld	de, $8080
+	ld	hl, $4000
+	push	af
+	bcall(_findOSHeaderSubField)
+	pop	af
+	push	af
+	inc	hl
+	bcall(_getFieldSize)
+	pop	af
+	push	af
+	bcall(_loadAIndPaged)
+	pop	bc
+	push	bc
+	sub	b
+	neg
+	bcall($80CF)		;give app execution privliges
+
+	bcall(_findSwapSector)
+	push	af
+	bcall(_eraseFlashPage)
+	pop	bc
+	pop	af
+	ld	h, a
+	and	$FC
+	ld	l, 4
+	push	bc
+	push	af
+copyToSwapLoop:
+	cp	h
+	jr	nz, notOurPage
+	
+	push	hl
+	push	bc
+	push	af
+	ld	(sourcePage), a
+	ld	a, b
+	ld	(destPage), a
+	ld	hl, $4000
+copyAppLoop:
+sourcePage	equ	$+1
+	ld	a, 00
+	ld	de, $8000
+	ld	bc, $100
+	push	hl
+	push	bc
+	bcall(_flashToRam)
+	pop	bc
+	pop	de
+	ld	hl, $8000
+	ld	a, d
+	cp	$40
+	jr	nz, notFirstCopy
+	ld	(hl), $80		;write $80 to first byte
+notFirstCopy:
+destPage	equ	$+1
+	ld	a, 00
+	bcall(_writeFlash)
+	ex	de, hl
+	bit	7, h
+	jr	z, copyAppLoop
+
+	pop	af
+	pop	bc
+	pop	hl
+	jr	pageCopied
+
+notOurPage:
+	bcall(_copyFlashPage)
+pageCopied:
+	inc	a
+	inc	b
+	dec	l
+	jr	nz, copyToSwapLoop
+
+	dec	a
+	bcall(_eraseFlashPage)
+
+	pop	bc
+	pop	af
+	push	af
+	ld	l, 4
+copyBack:
+	bcall(_copyFlashPage)
+	inc	a
+	inc	b
+	dec	l
+	jr	nz, copyBack
+
+	dec	a
+	bcall(_eraseFlashPage)
+	pop	af
+	ld	b, $FE
+	ld	de, $4000
+	bcall(_writeAByte)
+
+
+	bcall(_jForceCMDNoChar)
+
+	endRelocate2()
+appUnlockRunnerEnd:
+
+
+leaveFlashToRam2:
+	ld	hl, appUnlockRunner
+	ld	de, saveSScreen
+	ld	bc, appUnlockRunnerEnd-appUnlockRunner
+	ldir
+	jp	saveSScreen
+
+
+
+flashToRamStartApp:
+	and	$7F
+	out	(06), a
+	bit	7, h
+	jr	nz, $+2		;shouldn't even execute
+flashToRamLoop2:
+	bit	7, h
+	jr	z, dontSwitchPages2
+	in	a, (06)
+	inc	a
+	cp	$FF
+	jr	z, flashToRamQuit2
+	out	(06), a
+	ld	hl, $4000
+dontSwitchPages2:
+	ldi
+	ld	a, b
+	or	c
+	jr	nz, flashToRamLoop2
+flashToRamQuit2:
+	jr	leaveFlashToRam2
+
+	endRelocate()
+fakeAppKeyEnd:
+
+	.echo	"App FlashToRam needs to move ", $8100-flashToRamStartApp
+
+
+
+;######################################################
+
+fakeOSKey:
+	.dw	fakeOSKeyEnd-fakeOSKeyPut
+fakeOSKeyPut:
+	.db	$07, $3E
+	.db	(fakeOSKeyEnd-fakeOSKeyStart-1)/256
+fakeOSKeyStart:
+	relocate($8000)
+	.db	(fakeOSKeyEnd-fakeOSKeyStart-1)&255
+
+
+
+.block	164
+
+	.db	"Hi TI :)"
+
+;############################################
+
+#define	scall(xxxx)	ld ix, xxxx-$4000 \ call specialCall
+
+specialCall:
+	push	hl
+	push	af
+	push	bc
+	
+	ld	a, $C9
+	ld	hl, $4000
+	ld	b, h
+	ld	c, l
+	cpir
+	dec	hl
+	pop	bc
+	pop	af
+	ex	(sp), hl
+	push	hl
+	ld	l, (ix)
+	ld	h, (ix+1)
+	ex	(sp), hl
+	ret
+
+
+
+
+
+
+
+
+
+
+
+
+leaveFlashToRam:
+	in	a, (02)
+	rlca
+	ld	a, $7F
+	jr	c, not83p2
+	ld	a, $1F
+not83p2:
+	out	(06), a
+	
+	ld	de, $56
+	ld	b, $5A
+	xor	a
+	scall(_writeAByte)
+	scall(_markOSValid)
+	ld	de, $4100
+	ld	hl, $82A5
+	in	a, (06)
+	sub	$7F-$7A
+	ld	bc, $100
+	scall(_writeFlash)
+	scall(_resetCalc)
+
+
+
+
+
+
+
+flashToRamStart:
+	and	$7F
+	out	(06), a
+	bit	7, h
+	jr	nz, $+2		;shouldn't even execute
+flashToRamLoop:
+	bit	7, h
+	jr	z, dontSwitchPages
+	in	a, (06)
+	inc	a
+	cp	$FF
+	jr	z, flashToRamQuit
+	out	(06), a
+	ld	hl, $4000
+dontSwitchPages:
+	ldi
+	ld	a, b
+	or	c
+	jr	nz, flashToRamLoop
+flashToRamQuit:
+	jr	leaveFlashToRam
+
+	endRelocate()
+fakeOSKeyEnd:
+
+	.echo	"OS FlashToRam to needs to move ", $8100-flashToRamStart
+
+
+
+
+
+revisionNumText:
+	.db	"Enter revision #", 0
+	.db	"Must be <65536", 0
+
+
+typeTextText:
+	.db	"Enter text", 0
+
+
+blank0500:
+	.db	$05, $03, $05, $10
+
+
+progEnd:
+
+.end
+.end
