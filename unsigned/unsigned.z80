@@ -1462,98 +1462,128 @@ getCertToExtra:
 
 
 
-;#####################################
 UnlockFlash:
 ;Unlocks Flash protection.
-;Destroys: appBackUpScreen		;I wanted to use mine
-;          pagedCount			;but it doesn't work on the 83+BE
-;          pagedGetPtr
-;          arcInfo
-;          iMathPtr5
-;          pagedBuf
-;          ramCode
-        in a,(6)
-        push af
-        ld a,7Bh
-        call translatePage
-        out (6),a
-        ld hl,5092h
-        ld e,(hl)
-        inc hl
-        ld d,(hl)
-        inc hl
-        ld a,(hl)
-        call translatePage
-        out (6),a
-        ex de,hl
-        ld a,0CCh
-        ld bc,0FFFFh
-        cpir
-        ld e,(hl)
-        inc hl
-        ld d,(hl)
-        push de
-        pop ix
-        ld hl,9898h
-        ld (hl),0C3h
-        inc hl
-        ld (hl),returnPoint & 11111111b
-        inc hl
-        ld (hl),returnPoint >> 8
-        ld hl,pagedBuf
-        ld (hl),98h
-        ld de,pagedBuf+1
-        ld bc,49
-        ldir
-        ld (iMathPtr5),sp
-        ld hl,(iMathPtr5)
-        ld de,9A00h
-        ld bc,50
-        ldir   
-        ld de,(iMathPtr5)
-        ld hl,-12
-        add hl,de
-        ld (iMathPtr5),hl
-        ld iy,0056h-25h
-        ld a,50
-        ld (pagedCount),a
-        ld a,8
-        ld (arcInfo),a
-        jp (ix)
-translatePage:
-	push	bc
-        ld b,a
-        in a,(2)
-        and 80h
-        jr z,_is83P
-        in a,(21h)
-        and 3
-        ld a,b
-	pop	bc
-        ret nz
-        and 3Fh
-        ret
-_is83P: ld a,b
-        and 1Fh
-	pop	bc
-        ret
-returnPoint:
-        ld iy,flags
-        ld hl,(iMathPtr5)
-        ld de,12
-        add hl,de
-        ld sp,hl
-        ex de,hl
-        ld hl,9A00h
-        ld bc,50
-        ldir
-        pop af
-        out (6),a
-        ret
-
-
-
-
+	in a,(6)
+	push af
+	in a,(0Eh)
+	push af
+	;Find the code to call
+;#ifdef TI84PCSE
+;	ld a,05h
+;#else
+	ld a,7Bh
+;#endif
+	call outputPage
+	ld ix,_WriteToFlash
+	ld e,(ix+0)
+	ld d,(ix+1)
+	ld a,(ix+2)
+	call outputPage
+	ld ix,unlockPattern
+	call FindPatternU
+	jr nz,unlockReturn
+	;Jump into the routine
+	set 5,(iy+1Bh)
+	xor a
+	ld (83A4h),a
+	ld (822Fh),a
+	ld (83A3h),a
+	ld (8672h),a
+	inc a
+	ld (8432h),a
+	ld bc,1
+	ld hl,unlockReturn
+	push hl
+	ld hl,(iMathPtr4)
+	push hl
+	push hl
+	jp (hl)
+unlockReturn:
+	pop af
+	out (0Eh),a
+	pop af
+	out (6),a
+	ret
+unlockRet:
+	ret
+unlockPattern:
+	push af
+	ld a,1
+	nop
+	di
+	nop
+	nop
+	im 1
+	di
+	out (14h),a
+	di
+	call 0FEFEh
+	pop af
+	res 6,(iy+24h)
+	res 7,(iy+24h)
+	xor a
+	ld (0FEFEh),a
+	push bc
+	ld a,(0FEFEh)
+	cp 0
+	.db 28h,0FEh ;jr z,xx
+	ld a,(0FEFEh)
+	inc a
+	ld (0FEFEh),a
+	.db 0CDh ;call...
+	.db 0FFh
+FindPatternU:
+;Pattern in IX, starting address in DE
+;Returns NZ if pattern not found
+;(iMathPtr4) contains the address of match found
+;Search pattern:	terminated by 0FFh
+;					0FEh is ? (one-byte wildcard)
+;					0FCh is * (multi-byte wildcard)
+	ld hl,unlockRet
+	push hl
+	dec de
+searchLoopRestartU:
+	inc de
+	ld (iMathPtr4),de
+	push ix
+	pop hl
+searchLoopU:
+	ld b,(hl)
+	ld a,b
+	inc a
+	or a
+	ret z
+	inc de
+	inc a
+	jr z,matchSoFarU
+	dec de
+	inc a
+	inc a
+	ld c,a
+	;At this point, we're either the actual byte (match or no match) (C != 0)
+	;  or * wildcard (keep going until we find our pattern byte) (C == 0)
+	or a
+	jr nz,findByteU
+	inc hl
+	ld b,(hl)
+findByteU:
+	ld a,(de)
+	inc de
+	bit 7,d
+	ret nz
+	cp b
+	jr z,matchSoFarU
+	;This isn't it; do we start over at the beginning of the pattern,
+	;  or do we keep going until we find that byte?
+	inc c
+	dec c
+	jr z,findByteU
+	ld de,(iMathPtr4)
+	jr searchLoopRestartU
+matchSoFarU:
+	inc hl
+	jr searchLoopU
 
 
 ;#####################################
