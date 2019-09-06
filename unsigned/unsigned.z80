@@ -24,9 +24,9 @@ saveSPz		equ	selected+1	;2
 	ld	($8000), a
 	ld	c, $FF
 	ld	ix, $7FFF
-	.db	$DD, $CB, 01, $FF
-	cp	$69 + $80
-	ret	nz
+	.db	$DD, $CB, 01, $FF ; set 7,(ix+1),a undoc
+;	cp	$69 + $80
+;	ret	nz
 ;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	call	unlockFlash
@@ -532,15 +532,6 @@ handleRevision:
 	ld	(curRow), de
 	bcall(_putS)
 
-;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-	di
-	ld	a, $50
-	ld	r, a
-	ld	a, r
-	cp	$52
-	jp	nz, $0000
-;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 	ld	de, $0100
 	call	removeFrom0300
 
@@ -708,12 +699,7 @@ addIfMissing:
 	ld	b, h
 	ld	c, l
 
-;	ld	a, $FF
-;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-	ld	a, 1
-	.db	$ED, $7C
-;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^	
-
+	ld	a, $FF
 	ld	(de), a
 	ld	hl, $F001
 	call	modifySizeByte
@@ -734,14 +720,6 @@ copyPrelengthed:
 
 ;#############################
 locateKey:
-;VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-	di
-	ld	a, $FF
-	ld	r, a
-	ld	a, r
-	cp	$81
-	jp	nz, $0000
-;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	ld	hl, $F001
 	push	de
 	bcall(_getFieldSize)
@@ -1032,13 +1010,7 @@ dontCreate0300Field:
 	ex	de, hl
 	ld	de, $E000
 	ldir
-;	ld	a, $FF
-;VVVVVVVVVVVVVVVVVVVVVVVVVVVV
-	di
-	ld	a, $FF-2
-	ld	r, a
-	ld	a, r
-;^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	ld	a, $FF
 	ld	(de), a
 	push	hl
 	
