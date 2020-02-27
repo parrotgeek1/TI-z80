@@ -1,24 +1,8 @@
 
 *.bin
-
 *.o
-
 *.a
-
 82A_exploit/rabbitsign-2.1/src/rabbitsign
-
 82A_exploit/rabbitsign-2.1/src/rskeygen
-
 82A_exploit/rabbitsign-2.1/src/packxxk
-
 82A_exploit/to8xv/to8xv
-
-82A_exploit/xxu2rom/xxu2rom
-
-82A_exploit/dump.rom
-
-82A_exploit/dump82a.rom
-
-82A_exploit/asm.txt
-
-82A_exploit/CERTIMG.8xv
