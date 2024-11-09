@@ -2,3 +2,4 @@
 *.o
 *.a
 82A_exploit/to8xv/to8xv
+__pycache__
