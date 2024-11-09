@@ -1,7 +1,6 @@
-# This repository is archived and no longer supported due to a lack of interest.
+## This repository is archived and no longer supported due to a lack of interest.
 
-# TI-z80
-Programs, tools, information, and exploits for TI z80 calculators.
+# Exploit and related tools enabling the installation of flash applications and (some) assembly programs on the TI-82 Advanced, which does not natively support them.
 
 See the 82A_exploit folder. (I can't move the files into the root directory because they are hotlinked on TI-Planet.)
 
