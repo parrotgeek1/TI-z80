@@ -8,7 +8,7 @@ See the 82A_exploit folder. (I can't move the files into the root directory beca
 
 This repository was missing a license until 2024/11/08, but the GPLv2 license applies retroactively.
 
-The Python code from Brandon Wilson's 82A_exploit.zip is under the WTFPL. 
+The code from Brandon Wilson's 82A_exploit.zip is under the WTFPL. 
 
 Brandon Wilson's other code and To8xv are under unspecified licenses, and should be assumed to be copyrighted by their creators.
 
